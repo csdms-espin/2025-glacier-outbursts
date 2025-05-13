@@ -11,6 +11,42 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import math
 
+#create ThawIce function #cred: Lucille
+class ThawIce:
+    #define function and input
+    def __init__ (self, ice_thickness):
+        self.ice_thickness = ice_thickness 
+    #define thaw function and inputs
+    def thaw (self, thaw_rate, dt):
+        self.thaw_rate = thaw_rate
+        self.dt = dt
+        for i in range(len(self.ice_thickness)):
+            if self.ice_thickness[i] >= self.thaw_rate*self.dt:
+                self.ice_thickness[i] = self.ice_thickness[i] - self.dt*self.thaw_rate
+            else:
+                self.ice_thickness[i] = 0
+
+# Method 1: Parabolic circular mounds | cred: Susannah 
+def create_parabolic_mound(x_center, y_center, radius, depth_peak):
+    """Create a parabolic soil mound with specified radius and peak depth"""
+    # Calculate distance from center for all nodes
+    distance = np.sqrt((grid.x_of_node - x_center)**2 + (grid.y_of_node - y_center)**2)
+    # Create parabolic profile: depth = peak * (1 - (distance/radius)^2)
+    # Only apply within the specified radius
+    normalized_distance = distance / radius
+    # Create mask for nodes within the mound
+    within_mound = distance <= radius
+    # Calculate parabolic depth (only for nodes within radius)
+    parabolic_factor = np.zeros_like(distance)
+    parabolic_factor[within_mound] = 1 - normalized_distance[within_mound]**2
+    # Ensure no negative values
+    parabolic_factor = np.maximum(parabolic_factor, 0)
+    # Calculate depth to add
+    depth_to_add = depth_peak * parabolic_factor
+    # Add the new depth to existing soil depth
+    grid.at_node["soil__depth"] += depth_to_add
+    return depth_to_add
+
 #define the grid
 size_x = 100
 size_y = 200
@@ -24,10 +60,13 @@ soil_thickness = 5
 moraine_disappears_at_y = 100
 
 # add the topography    
-z_ice = grid.add_zeros('ice_thickness', at='node')
-z_soil = grid.add_zeros('soil_thickness', at='node')
-z_bed = grid.add_zeros('bedrock_thickness', at='node')
-elev = grid.add_zeros('topographic__elevation', at='node')
+z_ice = grid.add_zeros('ice__elevation', at='node')
+z_soil = grid.add_zeros('soil__depth', at='node')
+z_bed = grid.add_zeros('bedrock__elevation', at='node')
+grid.add_zeros('topographic__elevation', at='node')
+
+#base_soil_depth = 1  # meters
+grid.at_node["soil__depth"][:] = soil_thickness
 
 x = grid.x_of_node
 y = grid.y_of_node
@@ -41,60 +80,47 @@ z[z<0] = 0 # cut the sine function at 0
 z_ice += z
 z_soil += soil_thickness
 z_bed += bedrock_slope * y
-elev = z_ice + z_soil + z_bed
 
 # reassign the values to the grid just to be sure
-grid.at_node['ice_thickness'] = z_ice
-grid.at_node['soil_thickness'] = z_soil
-grid.at_node['bedrock_thickness'] = z_bed
-grid.at_node['topographic__elevation'] = elev
+grid.at_node['ice__elevation'] = z_ice
+grid.at_node['soil__depth'][:] = z_soil
+grid.at_node['bedrock__elevation'] = z_bed + grid.at_node['ice__elevation']
+grid.at_node['topographic__elevation'][:] = grid.at_node['bedrock__elevation'] + grid.at_node['soil__depth']
 
-# grid.imshow(grid.at_node["topographic__elevation"], color_for_closed = 'm')
-# plt.show()
+grid.imshow(grid.at_node["topographic__elevation"], color_for_closed = 'm')
+plt.show()
 
-# fig, axs = plt.subplots(2, 2, subplot_kw={"projection": "3d"}, figsize=(12, 10))
+fig, axs = plt.subplots(2, 2, subplot_kw={"projection": "3d"}, figsize=(12, 10))
 
-# def plot_each_axs(axs,size_x,size_y,topo, title="Topography"):
-#     X, Y = np.meshgrid(np.arange(0,size_x,spacing),np.arange(0,size_y,spacing))
-#     Z = topo.reshape(size_y, size_x)
-#     axs.set_box_aspect((1, size_y/size_x, Z.max()/size_x))
-#     axs.plot_surface(X, Y, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
-#     axs.set_title(title)
-#     cbar = fig.colorbar(axs.plot_surface(X, Y, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False), ax=axs, shrink=0.5, aspect=10)
+def plot_each_axs(axs,size_x,size_y,topo, title="Topography"):
+    X, Y = np.meshgrid(np.arange(0,size_x,spacing),np.arange(0,size_y,spacing))
+    Z = topo.reshape(size_y, size_x)
+    axs.set_box_aspect((1, size_y/size_x, Z.max()/size_x))
+    axs.plot_surface(X, Y, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+    axs.set_title(title)
+    cbar = fig.colorbar(axs.plot_surface(X, Y, Z, cmap=cm.coolwarm, linewidth=0, antialiased=False), ax=axs, shrink=0.5, aspect=10)
 
-# # Plot Ice Thickness
-# plot_each_axs(axs[0, 0], size_x, size_y, grid.at_node['ice_thickness'], title="Ice Thickness")
+# Plot Ice Thickness
+plot_each_axs(axs[0, 0], size_x, size_y, grid.at_node['ice__elevation'], title="Ice Thickness")
 
-# # Plot Soil Thickness
-# plot_each_axs(axs[0, 1], size_x, size_y, grid.at_node['soil_thickness'], title="Soil Thickness")
+# Plot Soil Thickness
+plot_each_axs(axs[0, 1], size_x, size_y, grid.at_node['soil__depth'], title="Soil Thickness")
 
-# # Plot Bedrock Layer
-# plot_each_axs(axs[1, 0], size_x, size_y, grid.at_node['bedrock_thickness'], title="Bedrock Layer")
+# Plot Bedrock Layer
+plot_each_axs(axs[1, 0], size_x, size_y, grid.at_node['bedrock__elevation'], title="Bedrock Layer")
 
-# # Plot Topography
-# plot_each_axs(axs[1, 1], size_x, size_y, grid.at_node['topographic__elevation'], title="Topography")
+# Plot Topography
+plot_each_axs(axs[1, 1], size_x, size_y, grid.at_node['topographic__elevation'], title="Topography")
 
 # Adjust layout
-# plt.tight_layout()
-# plt.show()
-
-# Add field "soil__depth" to the grid
-grid.add_zeros("soil__depth", at="node", dtype = "float")
-# Getting the calculated elevation that assigned into the soil_thickness at the beginning
-# and assign it to the soil__depth
-grid.at_node["soil__depth"] = grid.at_node["soil_thickness"]
-
-grid.add_ones("bedrock__elevation", at="node", dtype = "float")
-# Getting the calculated elevation that assigned into the ice_thickness at the beginning
-# and assign it to the bedrock__elevation
-# assuming ice is also bedrock
-grid.at_node["bedrock__elevation"] = grid.at_node["ice_thickness"] + grid.at_node["bedrock_thickness"]
+plt.tight_layout()
+plt.show()
 
 # set constant random seed for consistent topographic roughness
 np.random.seed(seed=5000)
 
 # impose topography values on model grid
-elev += np.random.uniform(0.0, 1.0, size=elev.shape)
+grid.at_node['topographic__elevation'] += np.random.uniform(0.0, 1.0, size=grid.at_node['topographic__elevation'].shape)
 # add boundaries for the ridge of the moraine
 grid.status_at_node[grid.x_of_node < (100/6)] = grid.BC_NODE_IS_CLOSED
 grid.status_at_node[grid.x_of_node > (100-100/6)] = grid.BC_NODE_IS_CLOSED
@@ -114,6 +140,8 @@ minimum_channel_threshold=100
 # PriorityFloodFLowRouter parameters
 flow_metric = "D8"
 phi_FR = 0.0
+debris_thickness_rate = 0.08 # m/yr
+
 # OVERLAND FLOW parameters
 # We establish the channel width & upstream position on the grid
 channel_w = 20. # set channel width, meters
@@ -139,14 +167,17 @@ h = grid.add_zeros("surface_water__depth", at="node", clobber=True)
 vel = grid.add_zeros("surface_water__velocity", at="link", clobber=True)
 
 # Calculating the initial water surface elevation from water depth and topographic elevation
-wse = grid.add_field("surface_water__elevation", elev, at="node", clobber=True)
+wse = grid.add_field("surface_water__elevation", grid.at_node['topographic__elevation'], at="node", clobber=True)
 
 # We set some other values
 mannings_n = 0.05 # Mannings roughness
-dt = 50 # Timestep; this is probably defined above/elsewhere
+# dt = 50 # Timestep; this is probably defined above/elsewhere
 
 # Instantiate the OverlandFlow component to work on this grid and run it
 of = OverlandFlow(grid, steep_slopes=True)
+
+# Instantiate the ThawIce component to work on this grid and run it
+ti = ThawIce(ice_thickness=grid.at_node['ice__elevation'])
 
 # Instantiate flow router
 fr = FlowAccumulator(grid, flow_director="FlowDirectorD8")
@@ -169,7 +200,7 @@ df = DepressionFinderAndRouter(grid)
 sp = Space(
     grid,
     K_sed=0.01, # Sediment erodibility, Governs the rate of sediment entrainment; may be specified as a single floating point number, an array of length equal to the number of grid nodes, or a string naming an existing grid field.
-    K_br=0.0001, # Bedrock erodibility, Governs the rate of bedrock erosion; may be specified as a single floating point number, an array of length equal to the number of grid nodes, or a string naming an existing grid field.
+    K_br=0.00001, # Bedrock erodibility, Governs the rate of bedrock erosion; may be specified as a single floating point number, an array of length equal to the number of grid nodes, or a string naming an existing grid field.
     F_f=0.0, # Fraction of fine sediment, (unitless, 0-1) fraction of rock that does not get converted to sediment but assumed to exit model domain as wash load
     phi=0.0, # Sediment porosity
     H_star=1.0, # Sediment entrainment length scale - think of reflecting bedrock surface roughness
@@ -181,13 +212,13 @@ sp = Space(
 )
 
 # Set model timestep
-timestep = 50.0  # years
+timestep = 1  # years
 # Set elapsed time to zero
 elapsed_time = 0.0  # years
 # Set timestep count to zero
 count = 0
 # Set model run time
-run_time = 500  # years
+run_time = 100  # years
 # Array to save sediment flux values
 sed_flux = np.zeros(int(run_time // timestep))  # Adjusted size
 node_next_to_outlet = 151
@@ -217,6 +248,25 @@ while elapsed_time < run_time:  # Changed condition
     # Save sediment flux value to array
     sed_flux[count] = grid.at_node["sediment__flux"][node_next_to_outlet]
 
+    # grid.at_node["soil__depth"] += timestep * debris_thickness_rate
+    create_parabolic_mound(
+        x_center=np.random.uniform(30, 50), 
+        y_center=np.random.uniform(125, 199), 
+        radius=np.random.uniform(1,20), 
+        depth_peak=np.random.uniform(0.01,1.0)
+    )
+    create_parabolic_mound(
+        x_center=np.random.uniform(50, 70), 
+        y_center=np.random.uniform(125, 199), 
+        radius=np.random.uniform(1,20), 
+        depth_peak=np.random.uniform(0.01,0.08)
+    )
+    # create_parabolic_mound(x_center=60, y_center=190, radius=10, depth_peak=0.08)
+    # thaw the ice
+    ti.thaw(thaw_rate=0.01, dt=timestep)  # Thaw rate in m/yr
+    # Update the ice thickness in the grid
+    # grid.at_node["ice_thickness"] = ti.ice_thickness
+
     # Add to value of elapsed time
     elapsed_time += timestep
 
@@ -224,6 +274,29 @@ while elapsed_time < run_time:  # Changed condition
     count += 1
     # Print progress
     print(f"Elapsed time: {elapsed_time:.2f} years, Sediment flux: {sed_flux[count-1]:.2f} m^3/yr")
+    # Plotting
+    # Plotting the results
+    if elapsed_time % 10 == 0:
+        #3D plot the topography
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        X, Y = np.meshgrid(np.arange(0, size_x, spacing), np.arange(0, size_y, spacing))
+        Z = grid.at_node['topographic__elevation'].reshape(size_y, size_x)
+
+        # Limit the x domain from 33.33 to 66.67
+        x_mask = (X[0, :] >= 16.67) & (X[0, :] <= 83.33)
+        X = X[:, x_mask]
+        Y = Y[:, x_mask]
+        Z = Z[:, x_mask]
+        ax.set_box_aspect((1, size_y/size_x, grid.at_node['topographic__elevation'].max()/size_x))  # Aspect ratio is 1:1:0.5
+        ax.plot_surface(X, Y, Z, cmap='terrain', edgecolor='none')
+        ax.set_xlabel('X Coordinate (m)')
+        ax.set_ylabel('Y Coordinate (m)')
+        ax.set_zlabel('Elevation (m)')
+        ax.set_title('3D Topography')
+        plt.show(block=False)
+        plt.pause(1)
+        plt.close()
 
 
 # Create a figure with 1 row and 2 columns
@@ -367,4 +440,23 @@ sedfluxplot.set_title("Sediment Flux Over Time")
 
 # Display the plot
 plt.tight_layout()
+plt.show()
+
+#3D plot the topography
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+X, Y = np.meshgrid(np.arange(0, size_x, spacing), np.arange(0, size_y, spacing))
+Z = grid.at_node['topographic__elevation'].reshape(size_y, size_x)
+
+# Limit the x domain from 33.33 to 66.67
+x_mask = (X[0, :] >= 16.67) & (X[0, :] <= 83.33)
+X = X[:, x_mask]
+Y = Y[:, x_mask]
+Z = Z[:, x_mask]
+ax.set_box_aspect((1, size_y/size_x, grid.at_node['topographic__elevation'].max()/size_x))  # Aspect ratio is 1:1:0.5
+ax.plot_surface(X, Y, Z, cmap='terrain', edgecolor='none')
+ax.set_xlabel('X Coordinate (m)')
+ax.set_ylabel('Y Coordinate (m)')
+ax.set_zlabel('Elevation (m)')
+ax.set_title('3D Topography')
 plt.show()
