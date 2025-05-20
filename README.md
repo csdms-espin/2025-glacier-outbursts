@@ -1,6 +1,9 @@
 # 2025-postglacial-landscapes
 ESPIn 2025 project exploring landscape influence of glacier retreat.
 
+!!!WARNING
+because the main notebook  `post_glacial_lab.ipynb` is to large to preview on github. We recommend it that you fork the repo and git clone to your local machine to check the notebook.
+
 Contributors:
 * Viet M Bui (organic rice fed - Delta & SLR dude)
 * Ari Koeppel (sol3ling)
